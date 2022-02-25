@@ -6,7 +6,7 @@ export class CountryController {
   constructor(private readonly countryService: CountryService) {}
 
   @Get()
-  getAllCountries(): Array<Object> {
+  async getAllCountries(): Promise<Object[]> {
     return this.countryService.fetchAll();
   }
 }
