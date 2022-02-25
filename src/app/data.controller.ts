@@ -1,10 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
 import { DataService } from './data.service';
 
-@Controller('data')
+@Controller('country')
 export class DataController {
   constructor(private readonly dataService: DataService) {}
 
-  @Get()
-  getData() {}
+  @Get(':id')
+  async getData(): Promise<object[]> {
+    return this.dataService.fetchData();
+  }
 }
