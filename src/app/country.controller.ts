@@ -1,12 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { CountryService } from './country.service';
+import { Response, CustomResponse } from '../response';
 
 @Controller('countries')
 export class CountryController {
   constructor(private readonly countryService: CountryService) {}
 
   @Get()
-  async getAllCountries(): Promise<Object[]> {
-    return this.countryService.fetchAll();
+  @Response()
+  async getAllCountries(res: CustomResponse): Promise<void> {
+    res.data = await this.countryService.fetchAll();
   }
 }
