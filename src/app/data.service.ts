@@ -1,17 +1,33 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { CACHE_MANAGER, Inject, Injectable, Logger } from '@nestjs/common';
+import { Cache } from 'cache-manager';
 import { getDataModel } from './models';
 import { Connection } from 'typeorm';
 
 @Injectable()
 export class DataService {
   private logger = new Logger(DataService.name);
-  constructor(private readonly connection: Connection) {}
+  constructor(
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly connection: Connection,
+  ) {}
 
   async validateCountryCode(countryCode): Promise<void> {
-    let data = await this.connection.manager.query(
-      'select distinct(country) from data where country_code=?',
-      [countryCode],
-    );
+    const cacheKey = `validate:${countryCode}`;
+
+    let data: any = await this.cacheManager.get(cacheKey);
+    if (!data) {
+      this.logger.debug('Country Code Validation done from Database.');
+      data = await this.connection.manager.query(
+        'select distinct(country) from data where country_code=?',
+        [countryCode],
+      );
+      await this.cacheManager.set(cacheKey, JSON.stringify(data), {
+        ttl: 600,
+      });
+    } else {
+      this.logger.debug('Country Code Validation done from Cache.');
+      data = JSON.parse(data);
+    }
 
     if (data.length == 0)
       throw 'Error: Incorrect Country Code. Please Check and Try again.';
@@ -45,22 +61,37 @@ export class DataService {
   }
 
   async fetchData(data: getDataModel): Promise<Object[]> {
-    return this.connection.manager.query(
-      `SELECT year, country_code, country, category_code, category_clean_name, value
-      from "data" d
-      where country_code = ? and 
-      year >= ? and 
-      year <= ? and 
-      category_code IN (${data.category_code
-        .reduce((str, data) => str + ' ,?', '')
-        .substring(2)})
-      order By country_code, category_code, "year";`,
-      [
-        data.country_code,
-        data.start_year,
-        data.end_year,
-        ...data.category_code,
-      ],
-    );
+    let dbQueryParams = [
+      data.country_code,
+      data.start_year,
+      data.end_year,
+      ...data.category_code,
+    ];
+    const cacheKey = JSON.stringify(dbQueryParams);
+
+    let cacheData: any = await this.cacheManager.get(cacheKey);
+    if (!cacheData) {
+      this.logger.debug('Data Fetched from Database.');
+      cacheData = await this.connection.manager.query(
+        `SELECT year, country_code, country, category_code, category_clean_name, value
+        from "data" d
+        where country_code = ? and 
+        year >= ? and 
+        year <= ? and 
+        category_code IN (${data.category_code
+          .reduce((str, data) => str + ' ,?', '')
+          .substring(2)})
+        order By country_code, category_code, "year";`,
+        dbQueryParams,
+      );
+      await this.cacheManager.set(cacheKey, JSON.stringify(cacheData), {
+        ttl: 600,
+      });
+    } else {
+      this.logger.debug('Data Fetched from Cache.');
+      cacheData = JSON.parse(cacheData);
+    }
+
+    return cacheData;
   }
 }
